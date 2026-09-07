@@ -4,10 +4,10 @@
   "description": "Framework-independent runtime for claykit procedural avatars.",
   "keywords": ["avatar", "svg", "animation", "procedural", "typescript"],
   "license": "MIT",
-  "homepage": "https://github.com/claykit/claykit#readme",
+  "homepage": "https://github.com/konpeeyush/claykit#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claykit/claykit.git",
+    "url": "git+https://github.com/konpeeyush/claykit.git",
     "directory": "packages/core"
   },
   "type": "module",
