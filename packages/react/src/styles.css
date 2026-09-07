@@ -1,0 +1,18 @@
+/* Minimal layout CSS for <AvatarCanvas>: a square box that fills its container, with the inner
+   SVG stretched to match. Ported from freddy-avatar-react/src/styles.css's .avatar-canvas rules. */
+
+.avatar-canvas {
+  display: inline-grid;
+  place-items: center;
+  max-width: 100%;
+  aspect-ratio: 1;
+  user-select: none;
+}
+
+.avatar-canvas__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}

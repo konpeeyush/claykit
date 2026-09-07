@@ -1,0 +1,25 @@
+/* Page-level layout for the playground demo. The `.avatar-canvas` / `.avatar-canvas__svg` rules
+   themselves ship in @claykit/react/styles.css (imported in main.tsx) — this file only covers the
+   surrounding chrome: topbar, tabs, stage, and control grid. */
+* { box-sizing: border-box; }
+:root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+body { margin: 0; min-height: 100vh; padding: 32px; color: #f7f8fa; background: #0d1117; }
+main { width: min(980px, 100%); margin: auto; }
+h1 { margin: 0; font-size: 24px; }
+.topbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.topbar__actions { display: flex; gap: 12px; align-items: center; }
+.tabs, .finish { display: flex; gap: 4px; padding: 4px; border: 1px solid #293140; border-radius: 12px; background: #141a22; }
+.tabs button, .finish button { padding: 7px 14px; border: 0; border-radius: 8px; background: transparent; }
+.finish button { text-transform: capitalize; }
+.tabs button[aria-pressed="true"], .finish button[aria-pressed="true"] { color: #fff; background: #263657; }
+.demo { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, .8fr); gap: 20px; }
+.stage, .controls { border: 1px solid #293140; border-radius: 22px; background: #141a22; }
+.stage { display: grid; min-height: 560px; padding: 32px; place-items: center; }
+.stage > * { width: min(80%, 460px) !important; height: auto !important; aspect-ratio: 1; }
+.error { max-width: 40ch; color: #ffb4a8; font-size: 14px; line-height: 1.5; text-align: center; }
+.controls { padding: 20px; }
+h2 { margin: 0 0 12px; font-size: 15px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 22px; }
+button { min-width: 0; padding: 10px; overflow: hidden; color: #dbe3ef; border: 1px solid #354052; border-radius: 10px; background: #1b2330; font: inherit; text-overflow: ellipsis; cursor: pointer; }
+button:hover, button[aria-pressed="true"] { color: #fff; border-color: #7392ed; background: #263657; }
+@media (max-width: 760px) { body { padding: 16px; } .demo { grid-template-columns: 1fr; } .stage { min-height: 420px; } }

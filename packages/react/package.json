@@ -1,0 +1,51 @@
+{
+  "name": "@claykit/react",
+  "version": "0.0.1",
+  "description": "React bindings for claykit procedural avatars.",
+  "keywords": ["avatar", "svg", "animation", "procedural", "react", "typescript"],
+  "license": "MIT",
+  "homepage": "https://github.com/claykit/claykit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/claykit/claykit.git",
+    "directory": "packages/react"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "README.md"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@claykit/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
