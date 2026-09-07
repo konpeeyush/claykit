@@ -1,14 +1,11 @@
-// renderAvatarFrame is the one function a renderer actually calls each frame: sample the pose,
-// then turn it into path data. Kept separate from sample.ts because geometry-building (marching
-// squares etc.) is comparatively expensive — callers that only need the Pose (e.g. advance.ts
-// grabbing a transition's "from") should never pay for it.
+// renderAvatarFrame is the one function a renderer calls each frame: sample the pose, then turn it
+// into path data. Kept separate from sample.ts because building geometry costs real work (surface
+// sampling + hulls per primitive) — callers that only need the Pose (e.g. advance.ts grabbing a
+// transition's "from") should never pay for it.
 
-import type { AvatarDefinition, AvatarRuntimeEnvironment, AvatarScene, Vec3 } from '../types.js'
-import { buildHeadSilhouette } from '../geometry/silhouette.js'
+import type { AvatarDefinition, AvatarRuntimeEnvironment, AvatarScene } from '../types.js'
+import { buildAvatarGeometry } from '../geometry/silhouette.js'
 import { eyePath } from '../geometry/eyeShape.js'
-import { projectPrimitive } from '../geometry/project.js'
-import { superellipseBoundaryPoints } from '../geometry/superellipse.js'
-import { contourToSmoothPath } from '../geometry/marchingSquares.js'
 import { sampleAvatarFrame } from './sample.js'
 import type { AvatarPlaybackState } from './state.js'
 
@@ -21,28 +18,23 @@ export const renderAvatarFrame = (
   env: AvatarRuntimeEnvironment,
 ): AvatarScene => {
   const pose = sampleAvatarFrame(definition, state, now, env)
-  // Geometry math (project.ts, silhouette.ts) works with the [x,y,z] tuple form used by
-  // position/rotation; Pose.head mirrors the definition's {x,y,z} object form, so convert once here.
-  const headPose: Vec3 = [pose.head.x, pose.head.y, pose.head.z]
+  const { headPath, nodePaths, behind, front } = buildAvatarGeometry(definition.body, pose.head, pose.perspective)
 
-  const headPath = buildHeadSilhouette(definition.body, headPose, pose.perspective)
-
-  const nodePaths = definition.body.nodes.map(node => {
-    const footprint = projectPrimitive(node.surface, node.position, node.rotation, headPose, {
-      perspective: pose.perspective,
-      viewScale: 1,
-    })
-    return contourToSmoothPath(superellipseBoundaryPoints(footprint))
-  })
+  // Eyes ride on the head's front face in 3D, so they need the same pose plus the depth of that
+  // face — half the primary volume's depth.
+  const faceZ = definition.body.primary.depth / 2
+  const eyeOptions = { openAmount: pose.eyesOpen, headPose: pose.head, perspective: pose.perspective, faceZ }
 
   return {
     geometry: {
       headPath,
-      leftPath: eyePath(pose.eyes.left, -pose.eyes.spacing / 2, pose.eyesOpen),
-      rightPath: eyePath(pose.eyes.right, pose.eyes.spacing / 2, pose.eyesOpen),
+      leftPath: eyePath({ eye: pose.eyes.left, sideOffsetX: -pose.eyes.spacing / 2, ...eyeOptions }),
+      rightPath: eyePath({ eye: pose.eyes.right, sideOffsetX: pose.eyes.spacing / 2, ...eyeOptions }),
       leftVisible: pose.eyesOpen > EYE_VISIBLE_THRESHOLD,
       rightVisible: pose.eyesOpen > EYE_VISIBLE_THRESHOLD,
       nodePaths,
+      behind,
+      front,
     },
     colors: pose.colors,
   }

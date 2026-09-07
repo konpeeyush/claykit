@@ -29,14 +29,16 @@ pnpm dev          # runs examples/playground
 pnpm -r run build # builds both packages
 ```
 
-## Why this exists
+## How it works
 
-This project is a from-scratch, clean-room replacement for an AGPL-3.0-licensed
-avatar engine that can't be used in closed-source production software. See
-[`docs/spec/provenance.md`](docs/spec/provenance.md) for exactly what informed this
-implementation (and what deliberately didn't), and
-[`docs/spec/avatar-definition.md`](docs/spec/avatar-definition.md) for the full data
-model and rendering approach.
+An avatar is defined by a `*.avatar.json` file: an assembly of 3D primitives (a head
+volume plus attached parts), a two-color palette, a library of named expressions, and
+animations that sequence those expressions. The engine poses that assembly in 3D,
+projects it, and renders it to SVG every frame — with blinking, ambient motion, and
+smooth transitions between expressions.
+
+See [`docs/spec/avatar-definition.md`](docs/spec/avatar-definition.md) for the full
+data model and rendering approach.
 
 ## License
 

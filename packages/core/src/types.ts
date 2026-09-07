@@ -116,6 +116,13 @@ export type AvatarScene = {
     rightVisible: boolean
     /** Per-node silhouette paths, in authored `body.nodes` order, for accent-color painting. */
     nodePaths: string[]
+    /**
+     * Node indices to draw before the head, and after it. Derived from each node's authored z, not
+     * from a per-frame depth sort — so a node stays on its side of the head through a whole head
+     * turn instead of popping through it mid-rotation.
+     */
+    behind: number[]
+    front: number[]
   }
   colors: {
     body: string

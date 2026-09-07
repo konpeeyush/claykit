@@ -1,8 +1,8 @@
 // Auto-discovers every *.avatar.json next to the project root and validates each one against
 // @claykit/core's own schema (validateAvatarDefinition) before it's trusted as an AvatarDefinition.
 // Drop a new definition file in beside freddy.avatar.json and it shows up as a tab — no wiring
-// needed. Ported from the project owner's own freddy-avatar-react/src/avatars.ts, swapped onto
-// @claykit/core's validator (the old repo's local parseAvatar wrapper is inlined here instead).
+// needed. Validation failures become a visible message rather than a thrown error, so one bad
+// file doesn't blank the page.
 import { validateAvatarDefinition, type AvatarDefinition } from '@claykit/core'
 
 const modules = import.meta.glob<{ default: unknown }>('../*.avatar.json', { eager: true })

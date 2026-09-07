@@ -1,37 +1,63 @@
-// Composes the primitive-projection, smooth-union, and marching-squares pieces into the single
-// path the rest of the engine actually wants: "given this body and this pose, what's the outline?"
+// Builds the per-primitive silhouettes for one posed frame.
+//
+// Each volume is drawn as its OWN shape — the ears stay distinct spheres sitting behind the head
+// rather than melting into it. Pipeline per primitive: sample its surface (primitiveSurface.ts),
+// place it in the assembly (own rotation, then position), rotate the whole assembly by the head
+// pose, project through the perspective camera (transform.ts), then hull the projected points
+// (convexHull.ts) — the hull of a projected convex body IS its exact silhouette.
+//
+// Layering is driven by each node's AUTHORED z, never by the per-frame projected depth: a node
+// behind the head must stay behind it through a whole head turn, and a depth sort would pop it
+// forward mid-rotation.
 
-import type { AvatarDefinition, Vec3 } from '../types.js'
-import { projectPrimitive } from './project.js'
-import { superellipseField } from './superellipse.js'
-import { smoothUnionAll } from './smoothUnion.js'
-import { marchingSquares, contourToSmoothPath } from './marchingSquares.js'
+import type { AvatarDefinition, BodyNode, EulerDeg, Primitive3D, Vec3 } from '../types.js'
+import { convexHull, closedPath, type Point } from './convexHull.js'
+import { samplePrimitiveSurface } from './primitiveSurface.js'
+import { apply, projectPoint, rotationMatrix, type Mat3 } from './transform.js'
 
-// The avatar's local unit space already matches this project's -150..150 SVG viewBox (see
-// examples/playground), so viewScale stays 1 — this is a rendering convention, tuned to taste,
-// not a property of the data format itself.
-const VIEW_HALF = 150
-const GRID_RESOLUTION = 96
-/** Smooth-min blend radius: how far apart two primitives can be and still visually fuse. */
-const BLEND_K = 18
+const eulerFromVec3 = (v: Vec3): EulerDeg => ({ x: v[0], y: v[1], z: v[2] })
 
-export const buildHeadSilhouette = (body: AvatarDefinition['body'], headPose: Vec3, perspective: number): string => {
-  const footprints = [
-    projectPrimitive(body.primary, [0, 0, 0], [0, 0, 0], headPose, { perspective, viewScale: 1 }),
-    ...body.nodes.map(node =>
-      projectPrimitive(node.surface, node.position, node.rotation, headPose, { perspective, viewScale: 1 }),
-    ),
-  ]
-
-  const field = (x: number, y: number) => smoothUnionAll(footprints.map(fp => superellipseField(fp, x, y)), BLEND_K)
-
-  const loops = marchingSquares(field, {
-    xMin: -VIEW_HALF,
-    xMax: VIEW_HALF,
-    yMin: -VIEW_HALF,
-    yMax: VIEW_HALF,
-    resolution: GRID_RESOLUTION,
+const silhouetteOf = (
+  primitive: Primitive3D,
+  localRotation: Mat3,
+  position: Vec3,
+  headRotation: Mat3,
+  perspective: number,
+): string => {
+  const projected: Point[] = samplePrimitiveSurface(primitive).map(local => {
+    const oriented = apply(localRotation, local)
+    const placed: Vec3 = [oriented[0] + position[0], oriented[1] + position[1], oriented[2] + position[2]]
+    const posed = apply(headRotation, placed)
+    const { x, y } = projectPoint(posed, perspective)
+    return { x, y }
   })
+  return closedPath(convexHull(projected))
+}
 
-  return loops[0] ? contourToSmoothPath(loops[0]) : ''
+export type AvatarGeometryParts = {
+  headPath: string
+  nodePaths: string[]
+  /** Node indices drawn before the head, and after it — from authored z, stable across a pose. */
+  behind: number[]
+  front: number[]
+}
+
+export const buildAvatarGeometry = (
+  body: AvatarDefinition['body'],
+  headPose: EulerDeg,
+  perspective: number,
+): AvatarGeometryParts => {
+  const headRotation = rotationMatrix(headPose)
+
+  const headPath = silhouetteOf(body.primary, rotationMatrix({ x: 0, y: 0, z: 0 }), [0, 0, 0], headRotation, perspective)
+
+  const nodePaths = body.nodes.map((node: BodyNode) =>
+    silhouetteOf(node.surface, rotationMatrix(eulerFromVec3(node.rotation)), node.position, headRotation, perspective),
+  )
+
+  const behind: number[] = []
+  const front: number[] = []
+  body.nodes.forEach((node, i) => (node.position[2] < 0 ? behind : front).push(i))
+
+  return { headPath, nodePaths, behind, front }
 }

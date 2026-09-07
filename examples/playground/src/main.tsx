@@ -1,9 +1,8 @@
 // The claykit playground app: an avatar-tab picker, a clay/plastic finish switcher, a "Download
 // PNG" button that rasterizes the on-screen SVG to a canvas, and animation/expression pickers
-// below the stage. Recreated against @claykit/react's real published API (AvatarCanvas, FINISHES,
-// Finish) from the project owner's own freddy-avatar-react/src/main.tsx. No accent groups are in
-// use by either migrated avatar, so the `accentGroups` prop is simply omitted here rather than
-// reintroducing the old repo's local accents.js stub.
+// below the stage. Built against @claykit/react's published API (AvatarCanvas, FINISHES, Finish)
+// so day-to-day development exercises the same surface consumers get. No avatar here uses accent
+// colours, so the optional `accentGroups` prop is simply omitted.
 import { StrictMode, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 

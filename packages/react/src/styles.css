@@ -1,5 +1,5 @@
 /* Minimal layout CSS for <AvatarCanvas>: a square box that fills its container, with the inner
-   SVG stretched to match. Ported from freddy-avatar-react/src/styles.css's .avatar-canvas rules. */
+   SVG stretched to match. Import as "@claykit/react/styles.css". */
 
 .avatar-canvas {
   display: inline-grid;

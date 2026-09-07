@@ -1,20 +1,16 @@
 # claykit
 
-## What this is and why it exists
+## What this is
 
-`freddy-avatar-react` (a sibling repo, `../freddy-avatar-react`) is a demo built on
-`@bible-strong/avatar-core` + `@bible-strong/avatar-react` — both `AGPL-3.0-only`.
-That license's copyleft terms make them unusable in the closed-source production
-product this is ultimately for. claykit is a from-scratch, MIT-licensed engine +
-React binding covering the same idea — a procedurally-shaped, animated, two-tone
-creature avatar — built without copying or reading that project's source.
+claykit is an MIT-licensed engine plus React binding for procedurally-shaped,
+animated, two-tone creature avatars: a `*.avatar.json` definition describes an
+assembly of 3D primitives and a library of expressions and animations, and the engine
+renders it to animated SVG.
 
-**Read `docs/spec/provenance.md` before touching anything AGPL-adjacent.** The short
-version: don't open the `bible-strong-avatar-lab` GitHub repo, don't read
-`node_modules/@bible-strong/*`'s bundled source in the sibling repo. Implement
-against `docs/spec/avatar-definition.md` instead — if something isn't specified
-there, that's a gap to fill with an original decision, not a reason to go check what
-the AGPL project does.
+`docs/spec/avatar-definition.md` is the specification the engine implements, and the
+source of truth for both the data model and the rendering/playback approach. Work
+from it. If something isn't specified there, that's a gap to fill with an original
+design decision.
 
 ## Repo layout
 
@@ -22,7 +18,7 @@ the AGPL project does.
 packages/core/     @claykit/core   — framework-agnostic engine (no React import anywhere)
 packages/react/    @claykit/react  — React bindings + clay/plastic paint finishes
 examples/playground/ — private Vite+React demo app (not published)
-docs/spec/          — the data model spec + clean-room provenance notes
+docs/spec/          — the avatar definition spec (data model + rendering approach)
 ```
 
 Two packages only, on purpose — see "Scope" below for what's NOT built yet.
@@ -50,37 +46,49 @@ things are easy to get wrong from memory:
   supported in the type/schema/math for completeness, but don't assume it's
   meaningfully exercised anywhere yet.
 
-## Rendering approach (why a 2D superellipse/marching-squares pipeline, not raymarching)
+## Rendering approach: a real 3D assembly, drawn per-primitive
 
-We don't know how the AGPL renderer actually works and didn't look. `packages/core/
-src/geometry/` is an original pipeline chosen to consume the same JSON shape and
-look good, using only textbook, publicly-documented graphics techniques:
+`packages/core/src/geometry/` is an original pipeline built from textbook,
+publicly-documented techniques. The full description is in
+`docs/spec/avatar-definition.md`; the parts worth knowing before you touch the code:
 
-1. Each `Primitive3D` → a 2D **superellipse** footprint (`geometry/superellipse.ts`,
-   Lamé curves — `roundness` maps to the exponent).
-2. **Weak-perspective projection** (`geometry/project.ts`) — cheap depth-based scale,
-   not a real 3D camera. A primitive's on-screen half-extents come from projecting
-   its three local half-axis vectors through the combined rotation and taking their
-   largest screen-space reach — an approximation, not an exact orthographic-shadow-
-   of-an-ellipsoid computation.
-3. **Smooth-min blending** (`geometry/smoothUnion.ts`, Quilez's cubic `smin`) fuses
-   the primary volume and all nodes into one field.
-4. **Marching squares** (`geometry/marchingSquares.ts`) traces that field's zero
-   contour into a polygon, resampled and turned into a smooth SVG path via
-   Catmull-Rom → cubic-bezier conversion. This same polyline→path helper is reused
-   for standalone (unblended) per-node paths — see `AvatarScene.geometry.nodePaths`,
-   which exists specifically so `@claykit/react` can paint individual nodes a
-   different (accent) color without recomputing any geometry.
-5. Eyes are NOT part of this pipeline — they're authored directly in 2D screen space
-   (`EyeShape: {width,height,x,y,angle}`) and rendered as an exact 2-arc ellipse path
-   (`geometry/eyeShape.ts`), offset left/right by half of `spacing`.
+- **Every primitive is drawn as its own shape.** Sample its superquadric surface as a
+  3D point cloud (`primitiveSurface.ts`) → orient/place it → rotate the whole assembly
+  by the head pose → perspective-project (`transform.ts`) → **convex hull**
+  (`convexHull.ts`) → path. Every primitive is convex, so the hull of its projected
+  points is exactly its silhouette. `silhouette.ts` ties it together.
+- **Layering comes from authored z, never a per-frame depth sort** — a sort makes
+  nodes pop through the head mid-rotation. `AvatarScene.geometry.behind` / `.front`
+  carry node indices; `@claykit/react` draws behind → head → front.
+- **Eyes ride the head's front face in 3D** (`eyeShape.ts`) so they travel,
+  foreshorten and roll with it. They're capsules, `angle` is in **degrees**, and the
+  whole outline is tessellated (straight sides included).
 
-**This was validated visually**, not just typechecked — see "How to sanity-check a
-change" below. First-attempt renders of both real avatars (Freddy: cube + 2 spheres
-+ 1 cylinder; Ribbit: capsule + 3 spheres) came out looking like coherent, charming
-creature heads with no tuning beyond the two constants in `silhouette.ts`
-(`GRID_RESOLUTION = 96`, `BLEND_K = 18`). If you change the geometry pipeline,
-re-render and look at it — don't just trust the types.
+### An earlier version of this got it badly wrong — don't go back
+
+The first implementation blended all primitives into one field with a smooth-minimum
+and traced it with marching squares. It produced a **single fused blob**: the ears
+melted into the head instead of reading as ears, and it distorted under rotation.
+Related mistakes that came with it, all since fixed: treating eye `angle` as radians
+(it's degrees, so every angled expression was wildly wrong), drawing eyes as flat 2D
+ellipses that ignored the head pose, and a weak-perspective fudge instead of a real
+projection. If you find yourself reaching for field blending again, re-read this.
+
+### Calibrated constants — change these only with measurements in hand
+
+Three constants were fitted by measuring rendered silhouettes, not derived:
+
+- `transform.ts` `BASE_CAMERA_DISTANCE = 800` — perspective strength. Halving it
+  visibly over-skews a turned head.
+- `primitiveSurface.ts` `profileExponent` / `footprintExponent` — deliberately
+  **split**, because they control visually independent things and one value can't
+  satisfy both. `e1` (profile) is the front-on corner rounding you look at; `e2`
+  (footprint) is how much extra width the head presents as it turns. Rounding both
+  together made the avatar look right at rest but move only ~60% as much as it
+  should — which reads as stiff and lifeless.
+- `render.ts` eye `faceZ` = half the primary's depth (the true face plane).
+
+**Validate geometry changes by rendering and looking**, plus measuring — see below.
 
 ## Playback state machine (`packages/core/src/playback/`)
 
@@ -102,10 +110,9 @@ re-render and look at it — don't just trust the types.
   published formulas from easings.net — generic, not derived from anywhere.
 - `beginExpression` (the `expression` prop's entry point) and `playAvatarAnimation`
   (the `animation` prop's entry point) each validate + build a full
-  `AvatarPlaybackState` in one call — there's no separate "resolve then manually
-  construct state" step in the public API (unlike the old demo app's pattern, which
-  is where the naming inspiration came from — see `resolveExpression`, kept only for
-  callers who just want a validity check).
+  `AvatarPlaybackState` in one call — there's no separate "resolve, then manually
+  construct state" step in the public API. `resolveExpression` is exported too, but
+  only for callers who want a validity check without starting a transition.
 
 ## Tooling
 
@@ -151,18 +158,40 @@ writeFileSync('/tmp/check.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox
 
 Then `rsvg-convert /tmp/check.svg -o /tmp/check.png` (installed via Homebrew on this
 machine) and view the PNG. Do NOT reach for chrome-devtools or any browser MCP tool
-for this — per the repo owner's global preference, browser automation is only used
-when explicitly asked; a static SVG render answers "does the geometry look right"
-without needing a browser at all.
+for this unless explicitly asked — per the repo owner's global preference, browser
+automation is only used on request; a static SVG render answers "does the geometry
+look right" without needing a browser at all.
+
+### Measuring, not just eyeballing
+
+For geometry work, measure the rendered output — `getBBox()` on the paths, in the
+`-150..150` viewBox:
+
+```js
+[...document.querySelector('svg').querySelectorAll('path')]
+  .map(p => { const b = p.getBBox(); return { x: +b.x.toFixed(1), w: +b.width.toFixed(1) } })
+```
+
+Path order is: head, then nodes, then the clipPath copy of the head, then the two
+eyes. Two things this catches that eyeballing does not:
+
+1. **Absolute size** per element (head / ears / tab / eyes) at a fixed expression.
+2. **Motion amplitude** — sample a bbox every 250ms across an animation and compare
+   the min/max range. This is how "the animation feels stiff" became a number: a
+   head-width range of 14.5 where ~22 was wanted pointed straight at the footprint
+   exponent. A static pose can look perfect while the motion is wrong, so check both.
 
 ## Scope — what's built vs. what's still open
 
-Built and verified (typecheck + build green, visually checked): the full geometry
-pipeline, the full playback state machine (expressions, animations, blink, ambient
-motion, color-override blending), ajv schema validation, `@claykit/react`'s
-`AvatarCanvas` with both `clay` and `plastic` finishes, and `examples/playground`
-migrated onto real production data (`freddy.avatar.json`, `ribbit.avatar.json` —
-identical to the originals except the `schema` tag).
+Built and verified (typecheck + build green, and checked both visually and by
+measuring rendered bboxes): the full geometry pipeline, the full playback state
+machine (expressions, animations, blink, ambient motion, color-override blending),
+ajv schema validation, `@claykit/react`'s `AvatarCanvas` with both `clay` and
+`plastic` finishes, and `examples/playground` running on a real avatar definition
+(`freddy.avatar.json` — 28 expressions, 6 animations).
+
+Freddy is currently the only avatar, so the `capsule` primitive is supported in code
+but exercised by nothing.
 
 Not yet done, in rough priority order:
 - **No automated tests.** Everything above was verified by hand (typecheck, build,

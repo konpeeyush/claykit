@@ -1,9 +1,10 @@
 // The React binding for @claykit/core: owns playback state in a ref, renders one AvatarScene per
-// animation frame, and paints it as SVG in either the "clay" or "plastic" finish. Overall
-// structure (rAF loop, prop-change effect seeding a cross-fade "from" pose) ported from the
-// project owner's own freddy-avatar-react/src/AvatarCanvas.tsx, rewired onto @claykit/core's API
-// (beginExpression/playAvatarAnimation build the transition state directly — no separate resolve
-// step needed).
+// animation frame, and paints it as SVG in either the "clay" or "plastic" finish.
+//
+// Two pieces of structure matter: one continuous rAF loop for the component's lifetime (so
+// ambient motion and blinking keep ticking between prop changes), and a prop-change effect that
+// samples the current pose first, so a new expression/animation cross-fades from wherever the
+// avatar actually is instead of snapping.
 import {
   advanceAvatarPlayback,
   beginExpression,
@@ -109,20 +110,23 @@ export const AvatarCanvas = forwardRef<HTMLDivElement, AvatarCanvasProps>(functi
         ? `url(#clay-grad-accent-${id}-${accentIndex})`
         : (accentGroups[accentIndex]?.color ?? bodyFill)
 
-  // Node bumps fuse into the silhouette by design (see docs/spec/avatar-definition.md's smooth-min
-  // step), so drawing them again behind the head fill just refines the seam. The head itself is
-  // the primary volume, not a node, so it always paints in the plain body colour.
-  const nodeGroups = groupNodesByMaterial(g.nodePaths, accentGroups)
+  // Each volume is its own shape, stacked in the order the core resolved from authored z: nodes
+  // behind the head (ears), then the head, then nodes in front of it (a snout). The head is the
+  // primary volume rather than a node, so it always paints in the plain body colour.
+  const drawNodes = (key: string, indices: readonly number[]) =>
+    groupNodesByMaterial(g.nodePaths, indices, accentGroups).map((group, i) => (
+      <g key={`${key}-${i}`} fill={paintOf(group.accentIndex)} filter={bevel}>
+        {group.paths.map((d, pi) => (
+          <path key={pi} d={d} />
+        ))}
+      </g>
+    ))
+
   const body = (
     <>
-      {nodeGroups.map((group, i) => (
-        <g key={`node-${i}`} fill={paintOf(group.accentIndex)} filter={bevel}>
-          {group.paths.map((d, pi) => (
-            <path key={pi} d={d} />
-          ))}
-        </g>
-      ))}
+      {drawNodes('behind', g.behind)}
       <path d={g.headPath} fill={bodyFill} filter={bevel} />
+      {drawNodes('front', g.front)}
     </>
   )
 

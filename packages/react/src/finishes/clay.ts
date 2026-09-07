@@ -1,12 +1,9 @@
 // Clay finish paint recipe: gradient body, inner bevel, grain, and a contact shadow, expressed as
-// SVG <defs> markup strings that AvatarCanvas drops in via dangerouslySetInnerHTML. Ported from
-// the project owner's own original freddy-avatar-react/src/clay.js and adapted to @claykit/core's
-// flatter AvatarScene.geometry (one `nodePaths` array in authored order, no per-frame front/back
-// path split or node ids) — see docs/spec/avatar-definition.md.
+// SVG <defs> markup strings that AvatarCanvas drops in via dangerouslySetInnerHTML.
 //
-// The definition schema allows exactly two flat hex colors (`colors.body` / `colors.eyes`,
-// additionalProperties: false), so the clay look cannot live in the *.avatar.json — it lives here,
-// in the render layer, and the definition stays schema-valid.
+// A definition carries exactly two flat hex colors (`colors.body` / `colors.eyes`), so the clay
+// look can't live in the *.avatar.json — it lives here, in the render layer, and the definition
+// stays schema-valid.
 
 const hexToHsl = (hex: string): [number, number, number] => {
   const n = parseInt(hex.slice(1), 16)
@@ -118,18 +115,26 @@ export type AccentGroup = { nodes: readonly number[]; color: string }
 export type MaterialGroup = { accentIndex: number | null; paths: string[] }
 
 /**
- * Buckets a frame's `geometry.nodePaths` by material — the body colour, or one bucket per accent
- * group — preserving each node's authored order within its bucket. Body-coloured nodes group
- * first so an accented node (e.g. a nose) paints on top of them. One <g> per material lets
- * AvatarCanvas apply a single bevel filter across the whole group, so same-material node paths
- * fuse into one lit mass instead of each path getting its own separate rim.
+ * Buckets the given node indices by material — the body colour, or one bucket per accent group —
+ * preserving each node's authored order within its bucket. Body-coloured nodes group first so an
+ * accented node (e.g. a nose) paints on top of them. One <g> per material lets AvatarCanvas apply
+ * a single bevel filter across the whole group, so same-material node paths read as one lit mass
+ * instead of each path getting its own separate rim.
+ *
+ * `indices` comes from a frame's `geometry.behind` / `geometry.front`, so this gets called once
+ * per layer — the head is drawn between the two.
  */
-export const groupNodesByMaterial = (nodePaths: readonly string[], accentGroups: readonly AccentGroup[]): MaterialGroup[] => {
+export const groupNodesByMaterial = (
+  nodePaths: readonly string[],
+  indices: readonly number[],
+  accentGroups: readonly AccentGroup[],
+): MaterialGroup[] => {
   const accentOf = new Map<number, number>()
   accentGroups.forEach((group, i) => group.nodes.forEach(n => accentOf.set(n, i)))
 
   const buckets = new Map<number | 'body', MaterialGroup>()
-  nodePaths.forEach((d, i) => {
+  indices.forEach(i => {
+    const d = nodePaths[i]
     if (!d) return
     const accentIndex = accentOf.get(i) ?? null
     const key = accentIndex === null ? 'body' : accentIndex

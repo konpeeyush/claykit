@@ -2,29 +2,9 @@
 
 ## Why this document exists
 
-claykit replaces `@bible-strong/avatar-core` / `@bible-strong/avatar-react` (AGPL-3.0-only)
-in production. AGPL's copyleft means we cannot start from, translate, or adapt that
-project's source and relicense it permissively — so everything under `packages/` here
-is written from scratch against the plain-English spec below, not against
-`bible-strong-avatar-lab`'s code. This file, and `provenance.md` next to it, are the
-paper trail for that: what we knew going in, and how it was derived.
-
-**Rule for anyone (human or agent) implementing against this spec:** don't open
-`bible-strong-avatar-lab`'s GitHub repo or read the unminified source of
-`@bible-strong/avatar-core` / `@bible-strong/avatar-react`. Everything needed is here.
-
-## Where this data model came from
-
-Two existing `*.avatar.json` files (`freddy.avatar.json`, `ribbit.avatar.json`, both
-original creative work by this project's author) were inspected structurally — field
-names, nesting, and the *set of values actually used* — to determine the functional
-shape a definition needs. A JSON shape describing "a rounded 3D primitive with a
-width/height/depth/roundness" or "an animation is a list of steps with a hold and
-transition duration" is a functional necessity of the problem (there's only one
-reasonable way to say that), not a creative expression — so reproducing that shape
-exactly (so the two existing files keep validating unchanged) is not a copyleft
-concern. The one literal identifier that *did* need to change is the self-describing
-`schema` tag, which named the other project by name — see below.
+This is the specification `@claykit/core` implements: the avatar definition format,
+and the rendering and playback model built on it. It's the source of truth — the code
+was written from this document, and anyone extending the engine should work from it.
 
 ## Top-level shape
 
@@ -86,39 +66,45 @@ type Animation = {
 This is validated with our own [ajv](https://ajv.js.org/)-based JSON Schema
 (`packages/core/src/schema.ts`), written independently from this spec.
 
-## Rendering approach (original design — not a reverse-engineering of the original renderer)
+## Rendering approach
 
-We do not know, and did not try to find out, how `avatar-core` actually turns this
-JSON into pixels. The pipeline below is designed from scratch to consume the same
-JSON shape and produce a good-looking, smoothly-animatable result — using only
-standard, publicly documented computer graphics techniques:
+The pipeline turns a definition into a good-looking, smoothly-animatable SVG frame
+using standard, publicly documented computer graphics techniques.
 
-1. **Primitive footprint** — each `Primitive3D` becomes a 2D
-   [superellipse](https://en.wikipedia.org/wiki/Superellipse) footprint:
-   `|x/a|^n + |y/b|^n = 1`, where `n` is derived from `roundness` (0 → large `n`,
-   sharp corners; 1 → `n = 2`, a plain ellipse). Superellipses are 19th-century public
-   domain math (Gabriel Lamé), not anything specific to any avatar library.
-2. **Projection** — each node's 3D `position`/`rotation` is projected to 2D with a
-   simple weak-perspective scale (`scale = 1 / (1 + z * perspective * k)`), the
-   standard cheap approximation used across 2.5D UI/game rendering — not a full 3D
-   camera. `perspective` from the active expression controls how strong that
-   depth-scale effect is.
-3. **Smooth union** — the primary volume's footprint and every node's footprint are
-   combined with a polynomial smooth-minimum (a well-known, widely published SDF
-   blending technique — see Inigo Quilez's `smin` articles), so attached parts (ears,
-   snout, ...) fuse into the silhouette instead of just overlapping.
-4. **Silhouette extraction** — the blended field is sampled on a grid and traced with
-   [marching squares](https://en.wikipedia.org/wiki/Marching_squares) (textbook
-   computational geometry) into a polyline, then smoothed into a Catmull-Rom-derived
-   SVG path — this becomes `scene.geometry.headPath`.
-5. **Eyes** — rendered independently as two superellipse shapes straight from the
-   active expression's `eyes.left` / `eyes.right`, clipped to the head silhouette.
-   Blinking scales `height` toward 0 rather than toggling visibility abruptly.
+**The avatar is a genuine 3D assembly, not a flat composition.** Every primitive is
+posed in 3D and drawn as its own shape; the head pose really rotates the assembly, so
+a yaw swings the near ear toward the camera and tucks the far one behind the head.
 
-None of steps 1–5 require, reference, or resemble any particular implementation —
-they're the standard toolbox for "blend some rounded 3D-ish shapes into a 2D
-silhouette," picked because they're fast enough to re-run every animation frame in a
-browser.
+1. **Surface sampling** — each `Primitive3D` is one member of the
+   [superquadric](https://en.wikipedia.org/wiki/Superquadrics) family (Barr's standard
+   generalisation of the ellipsoid), sampled as a 3D point cloud. Two exponents pick
+   the shape: `e1` shapes the vertical profile, `e2` the horizontal cross-section, so
+   sphere / rounded cube / cylinder / capsule all fall out of one formula.
+2. **Transform** — each primitive is oriented by its own `rotation`, placed at its
+   `position`, then the whole assembly is rotated by the expression's `head` pose
+   (Euler degrees; +y is down, matching SVG, so ears authored at y = -72 sit at top).
+3. **Perspective projection** — a real pinhole divide (`scale = D / (D - z)`), with the
+   pose's `perspective` scaling the camera distance; 0 collapses to orthographic.
+4. **Silhouette by convex hull** — every primitive is convex, and the silhouette of a
+   convex body under projection is exactly the convex hull of its projected surface
+   points. So each primitive's outline is a monotone-chain hull of its projected
+   cloud, emitted as a closed path smoothed with quadratic-through-midpoint segments
+   (which, unlike Catmull-Rom, can't overshoot the hull and bulge a flat edge).
+5. **Layering** — nodes are split into "behind the head" and "in front of it" by their
+   **authored z**, never by a per-frame depth sort. A per-frame sort would let a node
+   pop through the head mid-rotation; authored z is stable through a whole turn.
+6. **Eyes** — capsule (stadium) outlines, generated in the eye's own 2D frame, rotated
+   by `angle` (**degrees**), lifted onto the head's front face in 3D, then pushed
+   through the same rotation and camera as every volume — so they travel, foreshorten
+   and roll with the head. The whole outline is tessellated, straight sides included:
+   carrying a side by its endpoints alone leaves a straight screen-space chord that
+   visibly detaches from the curved head at oblique angles. Blinking scales height and
+   holds a floor, because an eye that reaches zero height reads as vanishing rather
+   than as a lid closing.
+
+Two constants in this pipeline (the camera distance, and the roundness→exponent
+mappings) are **calibrated against measured silhouettes**, not derived — see the
+calibration note in `CLAUDE.md`.
 
 ## Playback model
 
