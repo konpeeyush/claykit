@@ -1,6 +1,6 @@
 {
   "name": "@claykit/core",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Framework-independent runtime for claykit procedural avatars.",
   "keywords": ["avatar", "svg", "animation", "procedural", "typescript"],
   "license": "MIT",
