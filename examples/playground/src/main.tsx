@@ -1,9 +1,8 @@
-// The claykit playground app: an avatar-tab picker, a clay/plastic finish switcher, a "Download
-// PNG" button that rasterizes the on-screen SVG to a canvas, and animation/expression pickers
-// below the stage. Built against @claykit/react's published API (AvatarCanvas, FINISHES, Finish)
-// so day-to-day development exercises the same surface consumers get. No avatar here uses accent
-// colours, so the optional `accentGroups` prop is simply omitted.
-import { StrictMode, useMemo, useRef, useState } from 'react'
+// The claykit playground: one avatar centred on a light stage, with simple chip rows underneath
+// for finish, animation and expression. Built against @claykit/react's published API
+// (AvatarCanvas, FINISHES, Finish) so day-to-day development exercises the same surface consumers
+// get. No avatar here uses accent colours, so the optional `accentGroups` prop is omitted.
+import { StrictMode, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { AvatarCanvas, FINISHES, type Finish } from '@claykit/react'
@@ -15,7 +14,7 @@ import './styles.css'
 type Target = { kind: 'animation' | 'expression'; key: string }
 
 // Renders the current frame's inline SVG to an offscreen canvas and downloads it as a PNG.
-// The viewBox is 300x300 regardless of on-screen size, so we rasterize at a fixed pixel size
+// The viewBox is square regardless of on-screen size, so we rasterize at a fixed pixel size
 // for a crisp export rather than whatever CSS size the stage happens to be showing.
 async function captureAvatarPng(container: HTMLDivElement, filename: string, pixelSize = 1024) {
   const svg = container.querySelector('svg')
@@ -53,6 +52,23 @@ async function captureAvatarPng(container: HTMLDivElement, filename: string, pix
   }
 }
 
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="lab__row">
+      <span className="lab__label">{label}</span>
+      <div className="lab__chips">{children}</div>
+    </div>
+  )
+}
+
+function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="lab__chip" aria-pressed={on} onClick={onClick}>
+      {children}
+    </button>
+  )
+}
+
 function App() {
   const [avatarId, setAvatarId] = useState(avatars[0]?.id ?? '')
   const [finish, setFinish] = useState<Finish>('clay')
@@ -62,10 +78,7 @@ function App() {
 
   const { animations, expressions } = useMemo(() => {
     if (!avatar?.ok) return { animations: [] as string[], expressions: [] as string[] }
-    return {
-      animations: avatar.definition.animationOrder,
-      expressions: avatar.definition.expressionOrder,
-    }
+    return { animations: avatar.definition.animationOrder, expressions: avatar.definition.expressionOrder }
   }, [avatar])
 
   // Reset the selection whenever the avatar changes — keys are per-definition.
@@ -76,104 +89,100 @@ function App() {
       ? { kind: 'animation', key: animations[0] }
       : { kind: 'expression', key: expressions[0] ?? 'neutral' }
 
-  const pick = (avatarId: string) => {
-    setAvatarId(avatarId)
-    setTarget({ kind: 'animation', key: '' })
-  }
-
-  if (!avatar) return <main><p className="error">No *.avatar.json found in the project root.</p></main>
-
-  const handleCapture = () => {
-    if (!stageRef.current) return
-    captureAvatarPng(stageRef.current, `${avatar.id}-${finish}-${active.key || 'neutral'}.png`)
+  if (!avatar) {
+    return (
+      <main className="lab">
+        <p className="lab__error">No *.avatar.json found in the project root.</p>
+      </main>
+    )
   }
 
   return (
-    <main>
-      <header className="topbar">
-        {avatars.length > 1 ? (
-          <nav className="tabs" aria-label="Avatars">
-            {avatars.map(a => (
-              <button
-                key={a.id}
-                type="button"
-                aria-pressed={a.id === avatar.id}
-                onClick={() => pick(a.id)}
-              >
-                {a.label}
-              </button>
-            ))}
-          </nav>
-        ) : (
-          <h1>{avatar.label}</h1>
-        )}
-
-        <div className="topbar__actions">
-          <div className="finish" role="group" aria-label="Finish">
-            {FINISHES.map(f => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={f === finish}
-                onClick={() => setFinish(f)}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={handleCapture}>
-            Download PNG
-          </button>
-        </div>
+    <main className="lab">
+      <header className="lab__head">
+        <h1>claykit</h1>
+        <p>Procedural avatars, rendered to SVG.</p>
       </header>
 
-      <div className="demo">
-        <section className="stage">
+      <div className="lab__panel">
+        <div className="lab__stage">
           {avatar.ok ? (
             <AvatarCanvas
               key={avatar.id}
               ref={stageRef}
               definition={avatar.definition}
               finish={finish}
-              {...(active.kind === 'animation'
-                ? { animation: active.key }
-                : { expression: active.key })}
-              size="100%"
+              {...(active.kind === 'animation' ? { animation: active.key } : { expression: active.key })}
+              size={340}
               ariaLabel={`${avatar.label} avatar`}
             />
           ) : (
-            <p className="error">{avatar.message}</p>
+            <p className="lab__error">{avatar.message}</p>
           )}
-        </section>
+        </div>
 
-        <aside className="controls">
-          <h2>Animations</h2>
-          <div className="grid">
-            {animations.map(key => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={active.kind === 'animation' && active.key === key}
-                onClick={() => setTarget({ kind: 'animation', key })}
+        {avatars.length > 1 && (
+          <Row label="Avatar">
+            {avatars.map(a => (
+              <Chip
+                key={a.id}
+                on={a.id === avatar.id}
+                onClick={() => {
+                  setAvatarId(a.id)
+                  setTarget({ kind: 'animation', key: '' })
+                }}
               >
-                {key}
-              </button>
+                {a.label}
+              </Chip>
             ))}
-          </div>
-          <h2>Expressions</h2>
-          <div className="grid">
-            {expressions.map(key => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={active.kind === 'expression' && active.key === key}
-                onClick={() => setTarget({ kind: 'expression', key })}
-              >
-                {key}
-              </button>
-            ))}
-          </div>
-        </aside>
+          </Row>
+        )}
+
+        <Row label="Finish">
+          {FINISHES.map(f => (
+            <Chip key={f} on={f === finish} onClick={() => setFinish(f)}>
+              {f}
+            </Chip>
+          ))}
+        </Row>
+
+        <Row label="Animation">
+          {animations.map(key => (
+            <Chip
+              key={key}
+              on={active.kind === 'animation' && active.key === key}
+              onClick={() => setTarget({ kind: 'animation', key })}
+            >
+              {key}
+            </Chip>
+          ))}
+        </Row>
+
+        <Row label="Expression">
+          {expressions.map(key => (
+            <Chip
+              key={key}
+              on={active.kind === 'expression' && active.key === key}
+              onClick={() => setTarget({ kind: 'expression', key })}
+            >
+              {key}
+            </Chip>
+          ))}
+        </Row>
+
+        <div className="lab__actions">
+          <button
+            type="button"
+            className="lab__action"
+            onClick={() => {
+              if (stageRef.current) {
+                captureAvatarPng(stageRef.current, `${avatar.id}-${finish}-${active.key || 'neutral'}.png`)
+              }
+            }}
+          >
+            Download PNG
+          </button>
+        </div>
       </div>
     </main>
   )
@@ -182,5 +191,5 @@ function App() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
-  </StrictMode>
+  </StrictMode>,
 )

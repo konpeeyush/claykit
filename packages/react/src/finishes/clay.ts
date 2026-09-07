@@ -43,7 +43,7 @@ export const shade = (hex: string, targetL: number, satScale = 0.6, dh = 0): str
  * SVG filter/gradient ids are document-global.
  *
  * The light is deliberately ONE fixed source in user space, shared by every path:
- * `gradientUnits="userSpaceOnUse"` against the -150..150 viewBox. With the default
+ * `gradientUnits="userSpaceOnUse"` against the origin-centred user space. With the default
  * `objectBoundingBox` each path would resolve the gradient against its own bounding box, so
  * overlapping volumes would carry independent highlights that pop as the head turns. Anchoring
  * the light to the scene makes them read as one lit mass and keeps shading stable through motion.
@@ -61,10 +61,20 @@ export const clayDefsMarkup = (body: string, id: string | number = 0, accentColo
 </radialGradient>`,
     )
     .join('')
+  // Every filter region below is pinned to a FIXED box in user space (filterUnits="userSpaceOnUse"),
+  // matching AvatarCanvas's own viewBox (-210..210), rather than the SVG default of a percentage
+  // region relative to each element's objectBoundingBox. The avatar's geometry shifts a little on
+  // every animation frame (ambient shake, blinking, a turning head), so a bbox-relative region is a
+  // different rectangle every frame — Chrome has to resize/reposition the filter's raster surface
+  // and re-invalidate it each time, and that invalidation doesn't always land cleanly: the visible
+  // bug is a stale rectangular patch or thin vertical sliver of the *previous* frame stuck beside the
+  // avatar. Pinning the region to fixed coordinates makes it the same rectangle every frame, so
+  // there's nothing for that per-frame resize/reposition step to get wrong.
+  const region = 'filterUnits="userSpaceOnUse" x="-210" y="-210" width="420" height="420"'
   return `
 <radialGradient id="clay-grad-${id}" gradientUnits="userSpaceOnUse" cx="-48" cy="-72" r="246">${ramp(body)}
 </radialGradient>${accents}
-<filter id="clay-part-${id}" x="-35%" y="-35%" width="170%" height="170%">
+<filter id="clay-part-${id}" ${region}>
   <feGaussianBlur in="SourceAlpha" stdDeviation="3.4" result="b"/>
   <feOffset in="b" dx="3.4" dy="4" result="ob"/>
   <feComposite in="SourceAlpha" in2="ob" operator="out" result="m1"/>
@@ -76,17 +86,25 @@ export const clayDefsMarkup = (body: string, id: string | number = 0, accentColo
   <feComposite in2="m2" operator="in" result="hl"/>
   <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="sh"/><feMergeNode in="hl"/></feMerge>
 </filter>
-<filter id="clay-drop-${id}" x="-30%" y="-30%" width="160%" height="160%">
-  <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="${shade(body, 0.07, 0.55, -8)}" flood-opacity="0.42"/>
-</filter>
-<filter id="clay-grain-${id}" x="-30%" y="-30%" width="160%" height="160%">
+<filter id="clay-shade-${id}" ${region}>
+  <!-- Contact shadow — feDropShadow written out as its constituent primitives (blur, offset, flood,
+       composite, merge) rather than the shorthand, so it can feed into the grain pass below within
+       this SAME filter. See the comment on AvatarCanvas's body <g> for why shadow and grain must
+       live in one filter instead of two nested ones. -->
+  <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="shadowBlur"/>
+  <feOffset in="shadowBlur" dx="0" dy="6" result="shadowOffset"/>
+  <feFlood flood-color="${shade(body, 0.07, 0.55, -8)}" flood-opacity="0.42" result="shadowColor"/>
+  <feComposite in="shadowColor" in2="shadowOffset" operator="in" result="shadow"/>
+  <feMerge result="shaded"><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  <!-- Grain, masked to the ORIGINAL shape alpha (not the shadow-extended one) and overlaid onto the
+       shadowed result above. -->
   <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" seed="7" result="n"/>
   <feColorMatrix in="n" type="saturate" values="0" result="ng"/>
   <feComposite in="ng" in2="SourceAlpha" operator="in" result="nm"/>
   <feComponentTransfer in="nm" result="nf"><feFuncA type="linear" slope="0.11"/></feComponentTransfer>
-  <feBlend in="SourceGraphic" in2="nf" mode="overlay"/>
+  <feBlend in="shaded" in2="nf" mode="overlay"/>
 </filter>
-<filter id="clay-eye-${id}" x="-50%" y="-50%" width="200%" height="200%">
+<filter id="clay-eye-${id}" ${region}>
   <feGaussianBlur in="SourceAlpha" stdDeviation="2.6" result="eb"/>
   <feOffset in="eb" dx="0" dy="2.6" result="eo"/>
   <feComposite in="SourceAlpha" in2="eo" operator="out" result="em"/>
@@ -95,21 +113,6 @@ export const clayDefsMarkup = (body: string, id: string | number = 0, accentColo
   <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="es"/></feMerge>
 </filter>`
 }
-
-/**
- * Contour around the merged body silhouette — an `feMorphology` dilate on SourceAlpha, flooded
- * and composited under the artwork. Deriving it from the group's alpha traces only the outer
- * edge, so overlapping node shapes contribute no internal lines. Both finishes use it: plastic
- * needs it most (one flat hex has nothing else to separate the avatar from its background), but
- * it reads in clay too.
- */
-export const outlineDefsMarkup = (body: string, id: string | number = 0): string => `
-<filter id="clay-outline-${id}" x="-30%" y="-30%" width="160%" height="160%">
-  <feMorphology in="SourceAlpha" operator="dilate" radius="2" result="dilated"/>
-  <feFlood flood-color="${shade(body, 0.19, 0.45, -8)}" flood-opacity="0.85" result="ink"/>
-  <feComposite in="ink" in2="dilated" operator="in" result="outline"/>
-  <feMerge><feMergeNode in="outline"/><feMergeNode in="SourceGraphic"/></feMerge>
-</filter>`
 
 export type AccentGroup = { nodes: readonly number[]; color: string }
 export type MaterialGroup = { accentIndex: number | null; paths: string[] }

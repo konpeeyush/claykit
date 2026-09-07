@@ -90,6 +90,52 @@ Three constants were fitted by measuring rendered silhouettes, not derived:
 
 **Validate geometry changes by rendering and looking**, plus measuring — see below.
 
+### The canvas needs room, and its own layer (don't "tidy" this away)
+
+Several settings in `@claykit/react` exist to stop the browser smearing the avatar, and
+all of them look like dead weight if you don't know why they're there. Symptom when
+they're missing: thin diagonal slivers or a rectangular notch of the *previous* frame
+stranded beside a turning/animating head. It looks like a geometry bug and isn't — the
+giveaway is that rendering the same frame's path data through any other renderer (see
+the sanity-check snippet below) comes out perfectly clean, and that it reproduces on a
+perfectly static idle loop, not just mid-transition.
+
+- **The SVG viewBox is much larger than the avatar** (`±210` for geometry reaching
+  ~±145). The clay finish's drop shadow, bevel and grain paint well past the paths, so
+  the avatar must never reach its own edge.
+- **`overflow: hidden` + `contain: paint`** on `.avatar-canvas__svg`, and
+  **`transform: translateZ(0)`** (a real, if identity, transform — `will-change:
+  transform` alone is only a hint, and nothing here actually animates `transform`, so
+  Chrome has no compositing-worthy property change to key promotion off and won't
+  reliably grant its own GPU layer without this). Together these get the canvas onto
+  one composited layer that repaints as a unit instead of via main-thread dirty-rect
+  invalidation.
+- **The clay finish's shadow and grain live in ONE filter (`clay-shade` in
+  `finishes/clay.ts`), applied via a SINGLE `<g filter>`, never two nested ones.**
+  This was the actual root cause, found by bisecting live in Chrome DevTools (removing
+  the grain filter alone made the artifact vanish, across every subsequent frame, not
+  just the one where the DOM was touched) — nesting a feTurbulence-based filter (grain)
+  around another filtered group (the drop shadow) reliably corrupts Chrome's per-frame
+  repaint once the wrapped content's paths start changing every frame, even with the
+  layer-promotion settings above in place. If you ever find yourself adding a second
+  filter effect and reaching for `<g filter="outer"><g filter="inner">` to layer it on
+  top of clay's existing shadow — don't; expand it into the `clay-shade` filter's own
+  primitive chain instead (see the worked example already there for how `feDropShadow`
+  was unrolled into blur/offset/flood/composite so grain could feed off the same
+  filter).
+- Every filter in `clay.ts` also pins `filterUnits="userSpaceOnUse"` to a **fixed**
+  region (`-210 -210 420 420`, matching the viewBox) instead of the SVG default of a
+  percentage region relative to each element's `objectBoundingBox`. The avatar's
+  geometry shifts a little on every frame (ambient shake, blinking), so a bbox-relative
+  region is a different rectangle every frame, forcing Chrome to resize/reposition the
+  filter's raster surface each time. This alone didn't fix the nested-filter bug above,
+  but it's cheap insurance against a related class of invalidation glitch and avoids
+  redundant per-frame filter-region recomputation regardless.
+
+Also: `AvatarCanvas` sets only `width` inline and lets `aspect-ratio: 1` derive the
+height. Setting both means a container narrower than `size` shrinks the width while
+the height stays, squashing the canvas out of square.
+
 ## Playback state machine (`packages/core/src/playback/`)
 
 - `Pose` (`pose.ts`) is the blend-able numeric snapshot (head/eyes/perspective/
@@ -153,7 +199,7 @@ import { validateAvatarDefinition, createAvatarPlaybackState, renderAvatarFrame,
 const def = validateAvatarDefinition(JSON.parse(readFileSync('examples/playground/freddy.avatar.json', 'utf8'))).value
 const state = createAvatarPlaybackState()
 const scene = renderAvatarFrame(def, state, 0, { random: () => 0.5, reduceMotion: false })
-writeFileSync('/tmp/check.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-150 -150 300 300"><path d="${scene.geometry.headPath}" fill="${scene.colors.body}"/></svg>`)
+writeFileSync('/tmp/check.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-180 -180 360 360"><path d="${scene.geometry.headPath}" fill="${scene.colors.body}"/></svg>`)
 ```
 
 Then `rsvg-convert /tmp/check.svg -o /tmp/check.png` (installed via Homebrew on this
@@ -165,7 +211,7 @@ look right" without needing a browser at all.
 ### Measuring, not just eyeballing
 
 For geometry work, measure the rendered output — `getBBox()` on the paths, in the
-`-150..150` viewBox:
+`-180..180` viewBox:
 
 ```js
 [...document.querySelector('svg').querySelectorAll('path')]

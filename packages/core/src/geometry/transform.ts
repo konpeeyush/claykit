@@ -58,10 +58,10 @@ export const vec3FromEuler = (e: EulerDeg): Vec3 => [e.x, e.y, e.z]
 
 /**
  * Camera distance at perspective = 1, in the same units as the definition (the viewBox is
- * -150..150 and Freddy's head is ~175 wide). Calibrated by measuring rendered silhouettes: a
- * volume's front surface should magnify only ~5%, which reads as depth without the fish-eye
- * bulge a closer camera gives — at half this distance a turned head visibly over-skews. A pose's
- * `perspective` scales the strength; 0 collapses to orthographic.
+ * centred on the origin and Freddy's head is ~175 wide). Calibrated by measuring rendered
+ * silhouettes: a volume's front surface should magnify only ~5%, which reads as depth without
+ * the fish-eye bulge a closer camera gives — at half this distance a turned head visibly
+ * over-skews. A pose's `perspective` scales the strength; 0 collapses to orthographic.
  */
 const BASE_CAMERA_DISTANCE = 800
 

@@ -13,6 +13,23 @@
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
   pointer-events: none;
+  /* Clip to the viewBox (the SVG default) rather than letting paint escape the element. The path
+     data — and with it the clay filters' region — changes every animation frame, and with
+     `overflow: visible` the browser has to invalidate an unbounded, constantly-moving area; it
+     doesn't always manage, leaving stale slivers of the previous frame's drop shadow beside a
+     turning head. The viewBox already carries margin for the shadow, so nothing real is clipped. */
+  overflow: hidden;
+  /* Keep the repaint confined to this box so a per-frame redraw can't smear outside it. */
+  contain: paint;
+  /* Force this element onto its own GPU-composited layer. `will-change: transform` alone is only a
+     hint, and nothing here ever actually animates `transform` — only the paths' `d` attributes and
+     the filters' rendered output change every frame — so Chrome has no compositing-worthy property
+     change to key the promotion off and keeps painting this on the main thread with dirty-rect
+     invalidation instead. That invalidation doesn't reliably keep up with a filter whose input
+     changes every frame: it leaves rectangular patches or thin diagonal slivers of the previous
+     frame stuck beside a moving head. `translateZ(0)` is a real (if identity) transform, which
+     forces the promotion unconditionally. */
+  transform: translateZ(0);
+  will-change: transform;
 }

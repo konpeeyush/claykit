@@ -19,7 +19,7 @@ import {
 } from '@claykit/core'
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 
-import { clayDefsMarkup, groupNodesByMaterial, outlineDefsMarkup, type AccentGroup } from './finishes/clay.js'
+import { clayDefsMarkup, groupNodesByMaterial, type AccentGroup } from './finishes/clay.js'
 
 // The engine's playback machinery is identical either way — only the paint differs:
 //   clay    — gradient body, inner bevel, grain, contact shadow
@@ -134,11 +134,19 @@ export const AvatarCanvas = forwardRef<HTMLDivElement, AvatarCanvasProps>(functi
     <div
       ref={ref}
       className={['avatar-canvas', `avatar-canvas--${finish}`, className ?? ''].filter(Boolean).join(' ')}
-      style={{ width: size, height: size }}
+      // Width only — `aspect-ratio: 1` in the stylesheet derives the height. Setting both means a
+      // container narrower than `size` shrinks the width (max-width: 100%) while the height stays,
+      // squashing the box out of square.
+      style={{ width: size }}
       role="img"
       aria-label={ariaLabel}
     >
-      <svg className="avatar-canvas__svg" viewBox="-150 -150 300 300" aria-hidden="true">
+      {/* Geometry reaches roughly ±145 at the most extreme authored pose, and the clay finish's
+          drop shadow, bevel and grain all spill further still. The box is deliberately much wider
+          than the avatar — ~30% margin on every side — so nothing the finish paints ever reaches
+          the edge. Tighten this and a turning head collides with its own container: the shadow
+          gets shaved and the repaint leaves slivers along the edge it hits. */}
+      <svg className="avatar-canvas__svg" viewBox="-210 -210 420 420" aria-hidden="true">
         <defs>
           {clay && (
             <g
@@ -147,23 +155,25 @@ export const AvatarCanvas = forwardRef<HTMLDivElement, AvatarCanvasProps>(functi
               }}
             />
           )}
-          <g dangerouslySetInnerHTML={{ __html: outlineDefsMarkup(colors.body, id) }} />
           <clipPath id={`clay-clip-${id}`}>
             <path d={g.headPath} />
           </clipPath>
         </defs>
 
-        {/* Clay wraps the body in grain, over a contact shadow, over the outline; plastic keeps
-            just the outline so the flat fill still reads against its background. */}
-        {clay ? (
-          <g filter={`url(#clay-grain-${id})`}>
-            <g filter={`url(#clay-drop-${id})`}>
-              <g filter={`url(#clay-outline-${id})`}>{body}</g>
-            </g>
-          </g>
-        ) : (
-          <g filter={`url(#clay-outline-${id})`}>{body}</g>
-        )}
+        {/* No contour pass: an feMorphology dilate over a multi-part group streaks badly at the
+            edges (thin vertical combs alongside a turned head), and the volumes read fine without
+            one — clay has its bevel and contact shadow, plastic its flat two-tone. */}
+        {/* Shadow and grain are ONE filter (`clay-shade`) applied to a SINGLE group, not two nested
+            `<g filter>` wrappers. Nesting a feTurbulence-based filter (grain) around another
+            filtered group (the drop shadow) reliably corrupts Chrome's per-frame repaint: since
+            `body`'s paths change every animation frame, the outer filter's rendered output goes
+            stale in patches — a rectangular notch bitten out of a shape, or thin diagonal slivers
+            stuck beside it, left over from a previous frame. It reproduces on every idle tick, not
+            just during a pose transition, and survives forcing this element onto its own
+            compositing layer, so it's specifically about the nested-filter structure, not
+            compositing. Flattening both effects into one filter (see clay.ts) removes the nesting
+            and the artifact along with it. */}
+        {clay ? <g filter={`url(#clay-shade-${id})`}>{body}</g> : body}
 
         {/* Eyes stay outside the grain group — grain on eyes reads as speckle. */}
         <g clipPath={`url(#clay-clip-${id})`} fill={colors.eyes} filter={clay ? `url(#clay-eye-${id})` : undefined}>
