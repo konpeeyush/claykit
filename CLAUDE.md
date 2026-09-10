@@ -30,8 +30,11 @@ Two packages only, on purpose — see "Scope" below for what's NOT built yet.
 things are easy to get wrong from memory:
 
 - A `*.avatar.json` body is **3D primitives**, not flat 2D shapes: a `primary`
-  rounded-box/sphere/cylinder/capsule "head" volume, plus attached `nodes` (same
-  primitive types) at 3D `position`/`rotation` **tuples** (`[x,y,z]` arrays).
+  rounded-box/sphere/cylinder/capsule/cone "head" volume, plus attached `nodes` (same
+  primitive types) at 3D `position`/`rotation` **tuples** (`[x,y,z]` arrays). `cone` is
+  the odd one out geometrically — see `primitiveSurface.ts`'s file banner and
+  `coneRadiusProfile` — it's a genuine asymmetric taper, not a member of the shared
+  superquadric family the other four primitives are drawn from.
 - An `Expression`'s `head` pose is the ODD ONE OUT: it's an **`{x,y,z}` object**, not
   a tuple, even though it represents the same kind of thing (a rotation in degrees).
   This asymmetry is in the real data files (`examples/playground/*.avatar.json`),
@@ -237,7 +240,10 @@ ajv schema validation, `@claykit/react`'s `AvatarCanvas` with both `clay` and
 (`freddy.avatar.json` — 28 expressions, 6 animations).
 
 Freddy is currently the only avatar, so the `capsule` primitive is supported in code
-but exercised by nothing.
+but exercised by nothing. `cone` (added after Freddy) is likewise unexercised by
+`examples/playground` — it was validated by rendering `mopple.avatar.json`/
+`fern.avatar.json` (from the `project-102-frontend` consumer's `@bible-strong/avatar-core`
+→ `@claykit/core` migration) to SVG and looking, not by anything in this repo.
 
 Not yet done, in rough priority order:
 - **No automated tests.** Everything above was verified by hand (typecheck, build,

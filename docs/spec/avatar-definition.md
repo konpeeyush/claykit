@@ -27,12 +27,14 @@ type AvatarDefinition = {
 type Vec3 = [number, number, number]
 
 type Primitive3D = {
-  type: 'cube' | 'sphere' | 'cylinder' | 'capsule'
+  type: 'cube' | 'sphere' | 'cylinder' | 'capsule' | 'cone'
   width: number
   height: number
   depth: number
-  roundness: number          // 0 = sharp, 1 = fully rounded
-  morphRoundness?: number    // cylinder only: blends the cap independently of the radial roundness
+  roundness: number          // 0 = sharp, 1 = fully rounded — unused by `cone`, see below
+  morphRoundness?: number    // cylinder/cone: blends the whole profile toward a symmetric dome
+  tipRoundness?: number      // cone only, 0..1: 0 a sharp point, 1 a domed cap
+  baseRoundness?: number     // cone only, 0..1: 0 a flat disc edge, 1 a cylinder-like shoulder
 }
 
 type Expression = {
@@ -75,11 +77,17 @@ using standard, publicly documented computer graphics techniques.
 posed in 3D and drawn as its own shape; the head pose really rotates the assembly, so
 a yaw swings the near ear toward the camera and tucks the far one behind the head.
 
-1. **Surface sampling** — each `Primitive3D` is one member of the
+1. **Surface sampling** — `cube`/`sphere`/`cylinder`/`capsule` are each one member of the
    [superquadric](https://en.wikipedia.org/wiki/Superquadrics) family (Barr's standard
    generalisation of the ellipsoid), sampled as a 3D point cloud. Two exponents pick
    the shape: `e1` shapes the vertical profile, `e2` the horizontal cross-section, so
-   sphere / rounded cube / cylinder / capsule all fall out of one formula.
+   sphere / rounded cube / cylinder / capsule all fall out of one formula. `cone` is a
+   genuine base-to-tip taper — asymmetric, so it can't join that family — and gets its
+   own profile instead: a blend between the straight taper `1 - t` and the quarter
+   circle `sqrt(1 - t²)` (which sits at or above the straight line for every `t`, so
+   the blend can never dip inside the cone's own silhouette), swept by `tipRoundness`
+   and `baseRoundness` independently at each end and pushed toward the fully-round
+   limit by `morphRoundness`.
 2. **Transform** — each primitive is oriented by its own `rotation`, placed at its
    `position`, then the whole assembly is rotated by the expression's `head` pose
    (Euler degrees; +y is down, matching SVG, so ears authored at y = -72 sit at top).

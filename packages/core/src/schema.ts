@@ -34,12 +34,14 @@ export const avatarDefinitionSchema = {
       additionalProperties: false,
       required: ['type', 'width', 'height', 'depth', 'roundness'],
       properties: {
-        type: { enum: ['cube', 'sphere', 'cylinder', 'capsule'] },
+        type: { enum: ['cube', 'sphere', 'cylinder', 'capsule', 'cone'] },
         width: { type: 'number' },
         height: { type: 'number' },
         depth: { type: 'number' },
         roundness: { type: 'number', minimum: 0, maximum: 1 },
         morphRoundness: { type: 'number' },
+        tipRoundness: { type: 'number', minimum: 0, maximum: 1 },
+        baseRoundness: { type: 'number', minimum: 0, maximum: 1 },
       },
     },
     bodyNode: {

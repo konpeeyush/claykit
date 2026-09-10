@@ -4,16 +4,21 @@
 
 export type Vec3 = [number, number, number]
 
-export type PrimitiveType = 'cube' | 'sphere' | 'cylinder' | 'capsule'
+export type PrimitiveType = 'cube' | 'sphere' | 'cylinder' | 'capsule' | 'cone'
 
 export type Primitive3D = {
   type: PrimitiveType
   width: number
   height: number
   depth: number
+  /** Unused by `cone`, which has no single corner to round — see tipRoundness/baseRoundness. */
   roundness: number
-  /** Cylinder only: blends the cap roundness independently of the radial roundness. */
+  /** Cylinder and cone only: blends the whole profile toward a symmetric dome (sphere-like). */
   morphRoundness?: number
+  /** Cone only, 0..1: rounds the narrow end — 0 a sharp point, 1 a domed cap. */
+  tipRoundness?: number
+  /** Cone only, 0..1: rounds the wide end's rim — 0 a flat disc edge, 1 a cylinder-like shoulder. */
+  baseRoundness?: number
 }
 
 export type BodyNode = {
