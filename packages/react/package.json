@@ -1,6 +1,6 @@
 {
   "name": "@claykit/react",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "React bindings for claykit procedural avatars.",
   "keywords": ["avatar", "svg", "animation", "procedural", "react", "typescript"],
   "license": "MIT",
